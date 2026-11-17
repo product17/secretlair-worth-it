@@ -23,9 +23,13 @@ const DATE_PATTERN =
 const RELEASE_CONTEXT_PATTERN =
   /\b(available|arrives?|coming|comes to|goes live|launch(?:es)?|order window|sale begins?|releases?)\b/i
 const SECRET_LAIR_ARTICLE_PATTERN =
-  /(secret-lair|superdrop|chaos-vault)/i
+  /(secret-lair|superdrop|chaos-vault|extra-life)/i
 const ORDER_END_PATTERN =
   /\band\s+(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+)?(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s+(\d{4}),\s+(\d{1,2})(?::(\d{2}))?\s+(a\.m\.|p\.m\.)\s+PT\b/i
+const SALE_DATE_RANGE_PATTERN =
+  /\bfrom\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:,\s+(\d{4}))?\s*[–—-]\s*(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:,\s+(\d{4}))?\b/i
+const TIMED_SALE_DATE_RANGE_PATTERN =
+  /\bfrom\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:,\s+(\d{4}))?\s+to\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:,\s+(\d{4}))?\s+at\s+(\d{1,2})(?::(\d{2}))?\s+(a\.m\.|p\.m\.)\s+PT\b/i
 const PACIFIC_TIME_ZONE = 'America/Los_Angeles'
 const pacificDateFormatter = new Intl.DateTimeFormat('en-CA', {
   timeZone: PACIFIC_TIME_ZONE,
@@ -102,26 +106,21 @@ const findReleaseDate = (
   return null
 }
 
-const findSaleEndAt = (value: string): string | null => {
-  const match = ORDER_END_PATTERN.exec(value)
-  if (!match) {
-    return null
-  }
-
-  const month = MONTHS[match[1].toLowerCase()]
-  const day = Number(match[2])
-  const year = Number(match[3])
-  const minute = Number(match[5] ?? '0')
-  const meridiem = match[6].toLowerCase()
-  const rawHour = Number(match[4])
-  const hour =
-    rawHour % 12 + (meridiem.startsWith('p') ? 12 : 0)
+const pacificDateTimeToUtc = (
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+): string | null => {
   const targetUtcMilliseconds = Date.UTC(
     year,
     month - 1,
     day,
     hour,
     minute,
+    second,
   )
   const initialDate = new Date(targetUtcMilliseconds)
   const initialParts = Object.fromEntries(
@@ -144,6 +143,56 @@ const findSaleEndAt = (value: string): string | null => {
   return Number.isNaN(parsedDate.getTime())
     ? null
     : parsedDate.toISOString()
+}
+
+const findSaleEndAt = (
+  value: string,
+  fallbackYear: number | null,
+): string | null => {
+  const match = ORDER_END_PATTERN.exec(value)
+  if (match) {
+    const month = MONTHS[match[1].toLowerCase()]
+    const day = Number(match[2])
+    const year = Number(match[3])
+    const minute = Number(match[5] ?? '0')
+    const meridiem = match[6].toLowerCase()
+    const rawHour = Number(match[4])
+    const hour =
+      rawHour % 12 + (meridiem.startsWith('p') ? 12 : 0)
+
+    return pacificDateTimeToUtc(year, month, day, hour, minute, 0)
+  }
+
+  const rangeMatch = SALE_DATE_RANGE_PATTERN.exec(value)
+  if (rangeMatch) {
+    const endMonth = MONTHS[rangeMatch[4].toLowerCase()]
+    const endDay = Number(rangeMatch[5])
+    const endYearText = rangeMatch[6] ?? rangeMatch[3]
+    const endYear = endYearText ? Number(endYearText) : fallbackYear
+
+    return endYear === null
+      ? null
+      : pacificDateTimeToUtc(endYear, endMonth, endDay, 23, 59, 59)
+  }
+
+  const timedRangeMatch = TIMED_SALE_DATE_RANGE_PATTERN.exec(value)
+  if (!timedRangeMatch) {
+    return null
+  }
+
+  const endMonth = MONTHS[timedRangeMatch[4].toLowerCase()]
+  const endDay = Number(timedRangeMatch[5])
+  const endYearText = timedRangeMatch[6] ?? timedRangeMatch[3]
+  const endYear = endYearText ? Number(endYearText) : fallbackYear
+  const rawHour = Number(timedRangeMatch[7])
+  const minute = Number(timedRangeMatch[8] ?? '0')
+  const meridiem = timedRangeMatch[9].toLowerCase()
+  const hour =
+    rawHour % 12 + (meridiem.startsWith('p') ? 12 : 0)
+
+  return endYear === null
+    ? null
+    : pacificDateTimeToUtc(endYear, endMonth, endDay, hour, minute, 0)
 }
 
 const findArticleJsonLd = (
@@ -223,7 +272,7 @@ export const parseAnnouncementArticle = (
     $('meta[property="og:description"]').attr('content') ??
     ''
   const articleText = normalizeWhitespace($('article').first().text())
-  const saleEndsAt = findSaleEndAt(articleText)
+  const saleEndsAt = findSaleEndAt(articleText, publishedYear)
   const releaseDate =
     findReleaseDate(description, publishedYear) ??
     findReleaseDate(articleText, publishedYear)

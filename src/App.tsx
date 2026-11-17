@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
+import { BundleDetail } from './components/BundleDetail'
 import { CardDetail } from './components/CardDetail'
 import { CatalogList, GroupDetail } from './components/CatalogViews'
 import { formatTimestamp } from './components/formatters'
@@ -14,6 +15,10 @@ import {
   loadCatalog,
   loadShopData,
 } from './data/loaders'
+import {
+  indexBundlesByGroup,
+  resolveBundles,
+} from './data/bundles'
 import { resolveGroupAvailability } from './data/shop'
 import type { AnnouncementsData } from './types/announcements'
 import type { Catalog, GroupAvailability, ShopProduct } from './types/catalog'
@@ -22,6 +27,7 @@ type Route =
   | { page: 'catalog' }
   | { page: 'group'; slug: string }
   | { page: 'card'; slug: string; oracleId: string }
+  | { page: 'bundle'; productId: string }
 
 type CatalogState =
   | { status: 'loading' }
@@ -66,6 +72,14 @@ const parseHash = (hash: string): Route => {
   const groupMatch = path.match(/^group\/([^/]+)$/)
   if (groupMatch) {
     return { page: 'group', slug: safeDecode(groupMatch[1]) }
+  }
+
+  const bundleMatch = path.match(/^bundle\/([^/]+)$/)
+  if (bundleMatch) {
+    return {
+      page: 'bundle',
+      productId: safeDecode(bundleMatch[1]),
+    }
   }
 
   return { page: 'catalog' }
@@ -170,12 +184,36 @@ function App() {
   const catalog =
     catalogState.status === 'loaded' ? catalogState.catalog : null
   const selectedGroup = useMemo(() => {
-    if (!catalog || route.page === 'catalog') {
+    if (
+      !catalog ||
+      route.page === 'catalog' ||
+      route.page === 'bundle'
+    ) {
       return null
     }
 
     return catalog.groups.find((group) => group.slug === route.slug) ?? null
   }, [catalog, route])
+  const bundles = useMemo(
+    () =>
+      catalog
+        ? resolveBundles(catalog.groups, shopState.products)
+        : [],
+    [catalog, shopState.products],
+  )
+  const bundlesByGroupSlug = useMemo(
+    () => indexBundlesByGroup(bundles),
+    [bundles],
+  )
+  const selectedBundle = useMemo(
+    () =>
+      route.page === 'bundle'
+        ? bundles.find(
+            (bundle) => bundle.productId === route.productId,
+          ) ?? null
+        : null,
+    [bundles, route],
+  )
   const rawAvailabilityBySlug = useMemo<Record<string, GroupAvailability>>(
     () =>
       catalog
@@ -226,16 +264,26 @@ function App() {
       )
     }
 
-    if (route.page !== 'catalog' && !selectedGroup) {
+    const isMissingGroup =
+      (route.page === 'group' || route.page === 'card') &&
+      !selectedGroup
+    const isMissingBundle =
+      route.page === 'bundle' && !selectedBundle
+
+    if (isMissingGroup || isMissingBundle) {
       return (
         <div className="state-panel page-state">
           <p className="eyebrow">Not found</p>
-          <h1>That drop is not in the catalog</h1>
+          <h1>That product is not in the catalog</h1>
           <a className="back-link" href="#/">
             Return to all drops
           </a>
         </div>
       )
+    }
+
+    if (route.page === 'bundle' && selectedBundle) {
+      return <BundleDetail bundle={selectedBundle} />
     }
 
     if (route.page === 'card' && selectedGroup) {
@@ -255,6 +303,7 @@ function App() {
           announcementMetadata={
             announcementMetadataBySlug[selectedGroup.slug]
           }
+          bundles={bundlesByGroupSlug[selectedGroup.slug] ?? []}
         />
       )
     }
@@ -264,6 +313,8 @@ function App() {
         groups={catalogState.catalog.groups}
         availabilityBySlug={availabilityBySlug}
         announcementMetadataBySlug={announcementMetadataBySlug}
+        bundles={bundles}
+        bundlesByGroupSlug={bundlesByGroupSlug}
       />
     )
   })()

@@ -299,6 +299,11 @@ describe('normalizeSecretLairTitle', () => {
         "Secret Lair x Marvel's Hulk: SMASH! Foil Edition",
       ),
     ).toBe('marvel hulk smash')
+    expect(
+      normalizeSecretLairTitle(
+        'Rise of the Polygons | Extra Life 2026 Foil Edition',
+      ),
+    ).toBe('extra life 2026 rise of the polygons')
 
     SECRET_LAIR_TITLE_ALIASES['Store Name'] = 'Scryfall Name'
 

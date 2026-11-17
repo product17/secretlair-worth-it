@@ -121,6 +121,62 @@ describe('announcement article parsing', () => {
     })
   })
 
+  it('captures a date-only sale range through the end date', () => {
+    const html = `
+      <meta name="description" content="Secret Lair Presents: Their Magic Is Limitless, available July 20.">
+      <script type="application/ld+json">${articleJsonLd('Secret Lair x Global Fund for Women: Their Magic Is Limitless')}</script>
+      <article>
+        <h1>Their Magic Is Limitless</h1>
+        <p>Their Magic Is Limitless will be available from July 20–August 3.</p>
+        <h2>Secret Lair Presents: Their Magic Is Limitless</h2>
+        <p>Contents:</p><p>Seven cards</p><p>Price: $39.99</p>
+      </article>
+    `
+
+    expect(
+      parseAnnouncementArticle(
+        html,
+        'https://magic.wizards.com/en/news/announcements/limitless',
+      ),
+    ).toMatchObject({
+      releaseDate: '2026-07-20',
+      products: [
+        {
+          name: 'Secret Lair Presents: Their Magic Is Limitless',
+          saleEndsAt: '2026-08-04T06:59:59.000Z',
+        },
+      ],
+    })
+  })
+
+  it('captures an Extra Life timed sale range', () => {
+    const html = `
+      <meta name="description" content="Show your support for Extra Life with a Secret Lair drop.">
+      <script type="application/ld+json">${articleJsonLd('Magic Levels Up with Extra Life for 2026')}</script>
+      <article>
+        <h1>Magic Levels Up with Extra Life for 2026</h1>
+        <h2>Rise of the Polygons | Extra Life 2026</h2>
+        <p>Rise of the Polygons | Extra Life 2026 will be available from November 16 to November 30 at 1 a.m. PT.</p>
+        <p>Contents:</p><p>Five cards</p><p>Price: $39.99</p>
+      </article>
+    `
+
+    expect(
+      parseAnnouncementArticle(
+        html,
+        'https://magic.wizards.com/en/news/announcements/magic-levels-up-with-extra-life-for-2026',
+      ),
+    ).toMatchObject({
+      releaseDate: '2026-11-16',
+      products: [
+        {
+          name: 'Rise of the Polygons | Extra Life 2026',
+          saleEndsAt: '2026-11-30T09:00:00.000Z',
+        },
+      ],
+    })
+  })
+
   it('rejects articles without a release date', () => {
     expect(() =>
       parseAnnouncementArticle(

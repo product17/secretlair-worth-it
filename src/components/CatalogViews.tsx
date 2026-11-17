@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { GroupAnnouncementMetadata } from '../data/announcements'
+import type { SecretLairBundle } from '../data/bundles'
 import type {
   Availability,
   GroupAvailability,
@@ -8,18 +9,21 @@ import type {
   ValueSummary,
 } from '../types/catalog'
 import { CardImage } from './CardImage'
-import { formatDate, formatPrice } from './formatters'
+import { formatPrice } from './formatters'
 
 interface CatalogListProps {
   groups: SecretLairGroup[]
   availabilityBySlug: Record<string, GroupAvailability>
   announcementMetadataBySlug: Record<string, GroupAnnouncementMetadata>
+  bundles: SecretLairBundle[]
+  bundlesByGroupSlug: Record<string, SecretLairBundle[]>
 }
 
 interface GroupDetailProps {
   group: SecretLairGroup
   availability: GroupAvailability
   announcementMetadata?: GroupAnnouncementMetadata
+  bundles: SecretLairBundle[]
 }
 
 const availabilityLabels: Record<Availability, string> = {
@@ -34,6 +38,34 @@ const AvailabilityTag = ({ availability }: { availability: Availability }) => (
     {availabilityLabels[availability]}
   </span>
 )
+
+const BundleLinks = ({
+  bundles,
+}: {
+  bundles: readonly SecretLairBundle[]
+}) =>
+  bundles.length > 0 ? (
+    <div className="group-bundle-links">
+      {bundles.map((bundle) => (
+        <div className="group-bundle-link" key={bundle.productId}>
+          <a
+            href={`#/bundle/${encodeURIComponent(bundle.productId)}`}
+          >
+            Bundle {bundle.cardCount} cards{' '}
+            {bundle.price === null
+              ? 'Price unavailable'
+              : formatPrice(bundle.price)}
+          </a>
+          {bundle.cheapestPricedCardCount > 0 && (
+            <small>
+              {bundle.purchasable ? 'Available' : 'Out of stock'} ·
+              cheapest {formatPrice(bundle.cheapestPrintingTotal)}
+            </small>
+          )}
+        </div>
+      ))}
+    </div>
+  ) : null
 
 const SaleCountdown = ({ saleEndsAt }: { saleEndsAt: string }) => {
   const [now, setNow] = useState(() => Date.now())
@@ -252,6 +284,7 @@ const GroupValueGrid = ({
         blendedSummary={group.foilBlendedValue}
         availability={availability.foil}
         purchaseUrl={availability.foilPurchaseUrl}
+        saleEndsAt={saleEndsAt}
       />
     </div>
   )
@@ -261,8 +294,12 @@ export const CatalogList = ({
   groups,
   availabilityBySlug,
   announcementMetadataBySlug,
+  bundles,
+  bundlesByGroupSlug,
 }: CatalogListProps) => {
   const [availableOnly, setAvailableOnly] = useState(false)
+  const [showSecretLairs, setShowSecretLairs] = useState(true)
+  const [showBundles, setShowBundles] = useState(true)
   const filteredGroups = groups.filter((group) => {
     const availability = availabilityBySlug[group.slug] ?? {
       nonfoil: 'out-of-stock',
@@ -277,6 +314,13 @@ export const CatalogList = ({
 
     return !availableOnly || nonfoilAvailable || foilAvailable
   })
+  const filteredBundles = bundles.filter(
+    (bundle) => !availableOnly || bundle.purchasable,
+  )
+  const displayedCount =
+    (showSecretLairs ? filteredGroups.length : 0) +
+    (showBundles ? filteredBundles.length : 0)
+  const totalCount = groups.length + bundles.length
 
   return (
     <section className="catalog-section" aria-labelledby="catalog-heading">
@@ -304,23 +348,36 @@ export const CatalogList = ({
           >
             Show Available Only
           </button>
+          <button
+            type="button"
+            className={showSecretLairs ? 'filter-active' : undefined}
+            aria-pressed={showSecretLairs}
+            onClick={() => setShowSecretLairs((isActive) => !isActive)}
+          >
+            Drops
+          </button>
+          <button
+            type="button"
+            className={showBundles ? 'filter-active' : undefined}
+            aria-pressed={showBundles}
+            onClick={() => setShowBundles((isActive) => !isActive)}
+          >
+            Bundles
+          </button>
         </div>
         <span className="filter-count">
-          {filteredGroups.length} of {groups.length} drops
+          {displayedCount} of {totalCount} products
         </span>
       </div>
       <ol className="group-list">
-        {filteredGroups.map((group) => {
+        {showSecretLairs &&
+          filteredGroups.map((group) => {
           const availability = availabilityBySlug[group.slug] ?? {
             nonfoil: 'out-of-stock',
             foil: 'out-of-stock',
           }
           const announcementMetadata =
             announcementMetadataBySlug[group.slug]
-          const isUpcoming =
-            availability.nonfoil === 'not-yet-available' ||
-            availability.foil === 'not-yet-available'
-
           return (
             <li key={group.slug}>
               <article className="group-row">
@@ -334,14 +391,9 @@ export const CatalogList = ({
                     {group.cards.length}{' '}
                     {group.cards.length === 1 ? 'card' : 'cards'}
                   </span>
-                  {isUpcoming && announcementMetadata?.releaseDate && (
-                    <span className="upcoming-release-date">
-                      Available {formatDate(announcementMetadata.releaseDate)}
-                    </span>
-                  )}
-                  <span className="row-action" aria-hidden="true">
-                    View cards <span>→</span>
-                  </span>
+                  <BundleLinks
+                    bundles={bundlesByGroupSlug[group.slug] ?? []}
+                  />
                 </div>
                 <GroupValueGrid
                   group={group}
@@ -351,11 +403,46 @@ export const CatalogList = ({
               </article>
             </li>
           )
-        })}
+          })}
+        {showBundles &&
+          filteredBundles.map((bundle) => (
+            <li key={`bundle-${bundle.productId}`}>
+              <article className="group-row bundle-row">
+                <div className="group-identity">
+                  <p className="eyebrow">Bundle</p>
+                  <h2>
+                    <a
+                      href={`#/bundle/${encodeURIComponent(bundle.productId)}`}
+                    >
+                      {bundle.title}
+                    </a>
+                  </h2>
+                  <span className="card-count">
+                    {bundle.cardCount} cards
+                  </span>
+                </div>
+                <a
+                  className="bundle-list-summary"
+                  href={`#/bundle/${encodeURIComponent(bundle.productId)}`}
+                >
+                  <span>
+                    {bundle.price === null
+                      ? 'Price unavailable'
+                      : formatPrice(bundle.price)}
+                  </span>
+                  <AvailabilityTag
+                    availability={
+                      bundle.purchasable ? 'available' : 'out-of-stock'
+                    }
+                  />
+                </a>
+              </article>
+            </li>
+          ))}
       </ol>
-      {filteredGroups.length === 0 && (
+      {displayedCount === 0 && (
         <div className="filter-empty" role="status">
-          No drops match this availability filter.
+          No products match these filters.
         </div>
       )}
     </section>
@@ -393,6 +480,7 @@ export const GroupDetail = ({
   group,
   availability,
   announcementMetadata,
+  bundles,
 }: GroupDetailProps) => (
   <section className="detail-section" aria-labelledby="group-title">
     <a className="back-link" href="#/">
@@ -402,13 +490,6 @@ export const GroupDetail = ({
       <div>
         <p className="eyebrow">Secret Lair drop</p>
         <h1 id="group-title">{group.title}</h1>
-        {(availability.nonfoil === 'not-yet-available' ||
-          availability.foil === 'not-yet-available') &&
-          announcementMetadata?.releaseDate && (
-            <p className="upcoming-release-date detail-release-date">
-              Available {formatDate(announcementMetadata.releaseDate)}
-            </p>
-          )}
       </div>
       <div className="detail-availability" aria-label="Shop availability">
         <span>
@@ -423,6 +504,7 @@ export const GroupDetail = ({
       {group.cards.length} cards in source order. Select a card to compare every
       retained printing.
     </p>
+    <BundleLinks bundles={bundles} />
     <GroupValueGrid
       group={group}
       availability={availability}

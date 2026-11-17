@@ -93,6 +93,8 @@ const rawShopResponseSchema = z.union([
 ])
 
 export const SECRET_LAIR_TITLE_ALIASES: Record<string, string> = {
+  'Rise of the Polygons | Extra Life 2026':
+    'Extra Life 2026: Rise of the Polygons',
   "Secret Lair x Marvel's Hulk: SMASH!": 'Marvel: Hulk SMASH!',
   "Secret Lair x Marvel's Deadpool: I Fixed It (You're Welcome) Pool Party":
     "Marvel's Deadpool: I Fixed It (You're Welcome) Pool Party Edition",

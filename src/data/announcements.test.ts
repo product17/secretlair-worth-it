@@ -89,4 +89,78 @@ describe('resolveGroupReleaseDates', () => {
       },
     })
   })
+
+  it('activates an announced order window before products reach StoreSearch', () => {
+    expect(
+      applyAnnouncementSaleWindows(
+        {
+          'extra-life': {
+            nonfoil: 'not-yet-available',
+            foil: 'not-yet-available',
+            nonfoilPurchaseUrl:
+              'https://secretlair.wizards.com/us/shopall',
+            foilPurchaseUrl:
+              'https://secretlair.wizards.com/us/shopall',
+            products: [],
+          },
+        },
+        {
+          'extra-life': {
+            releaseDate: '2026-11-16',
+            saleEndsAt: '2026-11-30T09:00:00.000Z',
+          },
+        },
+        new Date('2026-11-17T17:00:00.000Z'),
+      ),
+    ).toMatchObject({
+      'extra-life': {
+        nonfoil: 'available',
+        foil: 'available',
+      },
+    })
+  })
+
+  it('matches reversed Extra Life product naming', () => {
+    const groups = [
+      {
+        slug: 'extra-life-2026-rise-of-the-polygons',
+        title: 'Extra Life 2026: Rise of the Polygons',
+      },
+    ] as SecretLairGroup[]
+    const announcements: AnnouncementsData = {
+      schemaVersion: 2,
+      generatedAt: '2026-11-03T17:00:00.000Z',
+      sourceUrl: 'https://magic.wizards.com/en/news/announcements',
+      scannedPages: 6,
+      releases: [
+        {
+          releaseDate: '2026-11-16',
+          products: [
+            {
+              name: 'Rise of the Polygons | Extra Life 2026',
+              sourceUrl:
+                'https://magic.wizards.com/en/news/announcements/extra-life',
+              saleEndsAt: '2026-11-30T09:00:00.000Z',
+            },
+          ],
+          announcementTitles: ['Magic Levels Up with Extra Life for 2026'],
+        },
+      ],
+      diagnostics: {
+        archiveArticlesFound: 1,
+        candidateArticlesFound: 1,
+        parsedArticles: 1,
+        skippedArticles: [],
+      },
+    }
+
+    expect(
+      resolveGroupAnnouncementMetadata(groups, announcements),
+    ).toEqual({
+      'extra-life-2026-rise-of-the-polygons': {
+        releaseDate: '2026-11-16',
+        saleEndsAt: '2026-11-30T09:00:00.000Z',
+      },
+    })
+  })
 })

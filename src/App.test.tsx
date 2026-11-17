@@ -148,6 +148,23 @@ const bundleProduct: ShopProduct = {
   componentProductIds: [],
   category: 'bundles',
 }
+const componentProduct: ShopProduct = {
+  productId: 'new-drop-nonfoil',
+  title: 'New Drop Non-Foil Edition',
+  normalizedTitle: 'new drop',
+  price: 29.99,
+  finish: 'nonfoil',
+  isBundle: false,
+  purchasable: true,
+  componentProductIds: [],
+  category: 'drops',
+}
+const resolvedBundleProduct: ShopProduct = {
+  ...bundleProduct,
+  title: 'New Drop Everything Bundle',
+  price: 49.99,
+  componentProductIds: [componentProduct.productId],
+}
 
 const cachedSnapshot: ShopSnapshot = {
   schemaVersion: 1,
@@ -290,7 +307,68 @@ describe('App', () => {
     ).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('shows the announcement date for a not-yet-available group', async () => {
+  it('lists bundle links, filters product types, and opens a local bundle page', async () => {
+    const user = userEvent.setup()
+    shopMocks.fetchShopProducts.mockResolvedValueOnce([
+      componentProduct,
+      resolvedBundleProduct,
+    ])
+
+    render(<App />)
+
+    const bundleLinks = await screen.findAllByRole('link', {
+      name: 'Bundle 2 cards $49.99',
+    })
+    expect(bundleLinks).toHaveLength(1)
+    expect(
+      screen.getByText('Available · cheapest $25.00'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', {
+        name: 'New Drop Everything Bundle',
+      }),
+    ).toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', { name: 'Drops' }),
+    )
+
+    expect(
+      screen.queryByRole('heading', { name: 'New Drop' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', {
+        name: 'New Drop Everything Bundle',
+      }),
+    ).toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('link', {
+        name: 'New Drop Everything Bundle',
+      }),
+    )
+
+    await waitFor(() => {
+      expect(window.location.hash).toBe('#/bundle/bundle-1')
+    })
+    expect(
+      screen.getByRole('heading', {
+        level: 1,
+        name: 'New Drop Everything Bundle',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'Shop on Secret Lair ↗' }),
+    ).toHaveAttribute(
+      'href',
+      'https://secretlair.wizards.com/us/product/bundle-1/',
+    )
+    expect(
+      screen.getByText('Cheapest-printing estimate: $25.00'),
+    ).toBeInTheDocument()
+  })
+
+  it('activates and counts down an announcement-defined order window', async () => {
     shopMocks.resolveGroupAvailability.mockReturnValueOnce({
       'new-drop': {
         nonfoil: 'not-yet-available',
@@ -309,11 +387,9 @@ describe('App', () => {
     render(<App />)
 
     expect(
-      await screen.findByText('Available September 28, 2026'),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(/Order window ends in/),
-    ).toBeInTheDocument()
+      await screen.findAllByText('Available'),
+    ).toHaveLength(2)
+    expect(screen.getAllByText(/Order window ends in/)).toHaveLength(2)
   })
 
   it('shows one product box for a single mixed-finish product', async () => {

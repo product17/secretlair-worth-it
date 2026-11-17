@@ -11,6 +11,10 @@ const normalizeAnnouncementName = (name: string): string =>
     .replace(/^presents\s+/u, '')
     .replace(/\s+commander$/u, '')
     .trim()
+    .replace(
+      /^(.+)\s+extra life 2026$/u,
+      'extra life 2026 $1',
+    )
 
 export interface GroupAnnouncementMetadata {
   releaseDate: string
@@ -65,8 +69,45 @@ export const applyAnnouncementSaleWindows = (
 ): Record<string, GroupAvailability> =>
   Object.fromEntries(
     Object.entries(availabilityBySlug).map(([slug, availability]) => {
-      const saleEndsAt = metadataBySlug[slug]?.saleEndsAt
-      if (!saleEndsAt || now.getTime() < new Date(saleEndsAt).getTime()) {
+      const metadata = metadataBySlug[slug]
+      const saleEndsAt = metadata?.saleEndsAt
+      if (!metadata || !saleEndsAt) {
+        return [slug, availability]
+      }
+
+      const nowTime = now.getTime()
+      const saleStartsTime = new Date(
+        `${metadata.releaseDate}T00:00:00Z`,
+      ).getTime()
+      const saleEndsTime = new Date(saleEndsAt).getTime()
+      const isActiveWindow =
+        nowTime >= saleStartsTime && nowTime < saleEndsTime
+
+      if (isActiveWindow) {
+        return [
+          slug,
+          {
+            ...availability,
+            nonfoil:
+              availability.nonfoil === 'not-yet-available'
+                ? 'available'
+                : availability.nonfoil,
+            foil:
+              availability.foil === 'not-yet-available'
+                ? 'available'
+                : availability.foil,
+            products: availability.products?.map((product) => ({
+              ...product,
+              status:
+                product.status === 'not-yet-available'
+                  ? 'available'
+                  : product.status,
+            })),
+          },
+        ]
+      }
+
+      if (nowTime < saleStartsTime) {
         return [slug, availability]
       }
 
